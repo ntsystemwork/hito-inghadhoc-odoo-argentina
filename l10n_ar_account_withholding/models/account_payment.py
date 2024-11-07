@@ -15,7 +15,8 @@ class AccountPayment(models.Model):
         ('no_aplica', 'No Aplica'),
         ('nro_regimen', 'Nro Regimen'),
     ],
-        'Retención Ganancias',
+        'Retención Ganancias hito',
+        store=True
     )
     regimen_ganancias_id = fields.Many2one(
         'afip.tabla_ganancias.alicuotasymontos',
