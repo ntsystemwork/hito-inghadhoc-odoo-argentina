@@ -12,15 +12,18 @@
             </form>
             <field name="communication" position="after">
                 
-                <label for="retencion_ganancias" invisible="company_regimenes_ganancias_ids == []"/>
+                <label for="retencion_ganancias" invisible=" partner_type != 'supplier' or state not in ['draft', 'confirmed'] "/>
                 <div invisible="company_regimenes_ganancias_ids == []">
-                    <field name="retencion_ganancias" class="o_inline" required="company_regimenes_ganancias_ids != [] and state in ['draft', 'confirmed']"/>
+                    <field name="retencion_ganancias" class="o_inline" 
+                        required="company_regimenes_ganancias_ids != [] and state in ['draft', 'confirmed']"
+                        invisible="partner_type != 'supplier' or state not in ['draft', 'confirmed']"/>
                     <field name="regimen_ganancias_id" class="o_inline"
-                           invisible="retencion_ganancias != 'nro_regimen'"
+                           invisible="partner_type != 'supplier' or state not in ['draft', 'confirmed']"
                            required="retencion_ganancias == 'nro_regimen' and company_regimenes_ganancias_ids != [] and state in ['draft', 'confirmed']"
                            domain="[('id', 'in', company_regimenes_ganancias_ids)]"
                            options="{'no_open': True, 'no_create': True}"
                            force_save='1' />
+                           <!-- invisible="retencion_ganancias != 'nro_regimen'" -->
                 </div>
                     <!-- Etiqueta fija debajo del campo retencion_ganancias -->
                
