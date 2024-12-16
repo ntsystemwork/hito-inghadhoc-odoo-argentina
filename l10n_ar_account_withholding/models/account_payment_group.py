@@ -24,8 +24,6 @@ class AccountPaymentGroup(models.Model):
         'Retención Ganancias:',
         readonly=False,
         store=True,
-        states={'draft': [('readonly', False)],
-                'confirmed': [('readonly', False)]}
     )
     regimen_ganancias_id = fields.Many2one(
         'afip.tabla_ganancias.alicuotasymontos',
@@ -39,7 +37,6 @@ class AccountPaymentGroup(models.Model):
     company_regimenes_ganancias_ids = fields.Many2many(
         'afip.tabla_ganancias.alicuotasymontos',
         compute='_company_regimenes_ganancias',
-        store=True
     )
 
     @api.depends('company_id.regimenes_ganancias_ids')
