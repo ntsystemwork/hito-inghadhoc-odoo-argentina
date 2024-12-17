@@ -13,7 +13,8 @@ class AccountMove(models.Model):
         string='Currency Rate (preview)',
         digits=(16, 6),
     )
-    l10n_ar_currency_rate = fields.Float(compute='_compute_l10n_ar_currency_rate')
+    
+    l10n_ar_currency_rate = fields.Float(compute='_compute_l10n_ar_currency_rate', store=True)
 
     @api.depends('reversed_entry_id')
     def _compute_l10n_ar_currency_rate(self):
