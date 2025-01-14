@@ -9,7 +9,7 @@
     'summary': '',
     'depends': [
         'l10n_ar_withholding',
-        # 'account_payment_pro',
+        'account_payment_pro',
     ],
     'data': [
         'views/report_withholding_certificate_templates.xml',
