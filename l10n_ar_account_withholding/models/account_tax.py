@@ -188,6 +188,19 @@ class AccountTax(models.Model):
             arba = self.get_partner_alicuot(partner, date)
             return arba.alicuota_percepcion / 100.0
         return 0.0
+    
+    def _mensaje_agip_error(self,mensaje,tipo):
+                
+        self.env['bus.bus']._sendone(
+                                    self.env.user.partner_id,
+                                    'simple_notification',
+                                    {
+                                        'title': "Advertencia",
+                                        'message': mensaje,
+                                        'sticky': tipo,  # Cambiar a True si necesitas que el mensaje permanezca en pantalla.
+                                    }
+                                )
+        _logger.info("***** 202 - Entrando en _mensaje_agip_error") 
 
     def get_partner_alicuot(self, partner, date):
         self.ensure_one()
@@ -242,26 +255,30 @@ class AccountTax(models.Model):
 
                     })
             if arba_tag and arba_tag.id in invoice_tags.ids:
-                arba_data = company.get_arba_data(
-                    commercial_partner,
-                    from_date, to_date,
-                )
-                # si no hay numero de comprobante entonces es porque no
-                # figura en el padron, aplicamos alicuota no inscripto
-                if not arba_data['numero_comprobante']:
-                    arba_data['numero_comprobante'] = \
-                        'Alícuota no inscripto'
-                    arba_data['alicuota_retencion'] = \
-                        company.arba_alicuota_no_sincripto_retencion
-                    arba_data['alicuota_percepcion'] = \
-                        company.arba_alicuota_no_sincripto_percepcion
+                
+                self._mensaje_agip_error(" - No se pudo obtener la Alícuota AGIP para el cálculos de Percepciones de este proveedor ", False)
 
-                arba_data['partner_id'] = commercial_partner.id
-                arba_data['company_id'] = company.id
-                arba_data['tag_id'] = arba_tag.id
-                arba_data['from_date'] = from_date
-                arba_data['to_date'] = to_date
-                alicuot = partner.arba_alicuot_ids.sudo().create(arba_data)
+                
+                # arba_data = company.get_arba_data(
+                #     commercial_partner,
+                #     from_date, to_date,
+                # )
+                # # si no hay numero de comprobante entonces es porque no
+                # # figura en el padron, aplicamos alicuota no inscripto
+                # if not arba_data['numero_comprobante']:
+                #     arba_data['numero_comprobante'] = \
+                #         'Alícuota no inscripto'
+                #     arba_data['alicuota_retencion'] = \
+                #         company.arba_alicuota_no_sincripto_retencion
+                #     arba_data['alicuota_percepcion'] = \
+                #         company.arba_alicuota_no_sincripto_percepcion
+
+                # arba_data['partner_id'] = commercial_partner.id
+                # arba_data['company_id'] = company.id
+                # arba_data['tag_id'] = arba_tag.id
+                # arba_data['from_date'] = from_date
+                # arba_data['to_date'] = to_date
+                # alicuot = partner.arba_alicuot_ids.sudo().create(arba_data)
             elif agip_tag and agip_tag.id in invoice_tags.ids:
                 agip_data = company.get_agip_data(
                     commercial_partner,
