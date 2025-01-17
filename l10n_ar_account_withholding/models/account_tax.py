@@ -280,7 +280,7 @@ class AccountTax(models.Model):
                 
             elif agip_tag and agip_tag.id in invoice_tags.ids:
                 
-                self._mensaje_agip_error(f" - No se pudo obtener la Alícuota AGIP para el cálculos de Percepciones de este proveedor: {partner} ", False)
+                self._mensaje_agip_error(f" - No se pudo obtener la Alícuota AGIP para el cálculos de Percepciones de este proveedor: {partner.name} ", False)
 
                 
                 # agip_data = company.get_agip_data(
