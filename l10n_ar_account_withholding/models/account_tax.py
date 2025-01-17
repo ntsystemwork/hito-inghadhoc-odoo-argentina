@@ -255,50 +255,53 @@ class AccountTax(models.Model):
 
                     })
             if arba_tag and arba_tag.id in invoice_tags.ids:
+                              
+                
+                arba_data = company.get_arba_data(
+                    commercial_partner,
+                    from_date, to_date,
+                )
+                # si no hay numero de comprobante entonces es porque no
+                # figura en el padron, aplicamos alicuota no inscripto
+                if not arba_data['numero_comprobante']:
+                    arba_data['numero_comprobante'] = \
+                        'Alícuota no inscripto'
+                    arba_data['alicuota_retencion'] = \
+                        company.arba_alicuota_no_sincripto_retencion
+                    arba_data['alicuota_percepcion'] = \
+                        company.arba_alicuota_no_sincripto_percepcion
+
+                arba_data['partner_id'] = commercial_partner.id
+                arba_data['company_id'] = company.id
+                arba_data['tag_id'] = arba_tag.id
+                arba_data['from_date'] = from_date
+                arba_data['to_date'] = to_date
+                alicuot = partner.arba_alicuot_ids.sudo().create(arba_data)
+                
+            elif agip_tag and agip_tag.id in invoice_tags.ids:
                 
                 self._mensaje_agip_error(" - No se pudo obtener la Alícuota AGIP para el cálculos de Percepciones de este proveedor ", False)
 
                 
-                # arba_data = company.get_arba_data(
+                # agip_data = company.get_agip_data(
                 #     commercial_partner,
-                #     from_date, to_date,
+                #     date,
                 # )
                 # # si no hay numero de comprobante entonces es porque no
                 # # figura en el padron, aplicamos alicuota no inscripto
-                # if not arba_data['numero_comprobante']:
-                #     arba_data['numero_comprobante'] = \
+                # if not agip_data['numero_comprobante']:
+                #     agip_data['numero_comprobante'] = \
                 #         'Alícuota no inscripto'
-                #     arba_data['alicuota_retencion'] = \
-                #         company.arba_alicuota_no_sincripto_retencion
-                #     arba_data['alicuota_percepcion'] = \
-                #         company.arba_alicuota_no_sincripto_percepcion
-
-                # arba_data['partner_id'] = commercial_partner.id
-                # arba_data['company_id'] = company.id
-                # arba_data['tag_id'] = arba_tag.id
-                # arba_data['from_date'] = from_date
-                # arba_data['to_date'] = to_date
-                # alicuot = partner.arba_alicuot_ids.sudo().create(arba_data)
-            elif agip_tag and agip_tag.id in invoice_tags.ids:
-                agip_data = company.get_agip_data(
-                    commercial_partner,
-                    date,
-                )
-                # si no hay numero de comprobante entonces es porque no
-                # figura en el padron, aplicamos alicuota no inscripto
-                if not agip_data['numero_comprobante']:
-                    agip_data['numero_comprobante'] = \
-                        'Alícuota no inscripto'
-                    agip_data['alicuota_retencion'] = \
-                        company.agip_alicuota_no_sincripto_retencion
-                    agip_data['alicuota_percepcion'] = \
-                        company.agip_alicuota_no_sincripto_percepcion
-                agip_data['from_date'] = from_date
-                agip_data['to_date'] = to_date
-                agip_data['partner_id'] = commercial_partner.id
-                agip_data['company_id'] = company.id
-                agip_data['tag_id'] = agip_tag.id
-                alicuot = partner.arba_alicuot_ids.sudo().create(agip_data)
+                #     agip_data['alicuota_retencion'] = \
+                #         company.agip_alicuota_no_sincripto_retencion
+                #     agip_data['alicuota_percepcion'] = \
+                #         company.agip_alicuota_no_sincripto_percepcion
+                # agip_data['from_date'] = from_date
+                # agip_data['to_date'] = to_date
+                # agip_data['partner_id'] = commercial_partner.id
+                # agip_data['company_id'] = company.id
+                # agip_data['tag_id'] = agip_tag.id
+                # alicuot = partner.arba_alicuot_ids.sudo().create(agip_data)
             elif cdba_tag and cdba_tag.id in invoice_tags.ids:
                 cordoba_data = company.get_cordoba_data(
                     commercial_partner,
