@@ -108,7 +108,11 @@ class ResCompanyJurisdictionPadron(models.Model):
             if not path_file:
                 self.descompress_file(self.file_padron)
                 path_file = self.find_file("/tmp/", padron_type)
-            nro, aliquot = self.find_aliquot("/tmp/" + path_file, partner.vat)
+            try:
+                nro, aliquot = self.find_aliquot("/tmp/" + path_file, partner.vat)
+            except:
+                nro, aliquot = 0,0
+            
             if padron_type == "Per":
                 aliquot_per = aliquot and aliquot.replace(",", ".")
             else:
