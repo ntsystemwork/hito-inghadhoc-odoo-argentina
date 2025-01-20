@@ -111,6 +111,7 @@ class ResCompanyJurisdictionPadron(models.Model):
             try:
                 nro, aliquot = self.find_aliquot("/tmp/" + path_file, partner.vat)
             except:
+                nro, aliquot = self.find_aliquot("/tmp/" + path_file, partner.vat)
                 nro, aliquot = 0,0
             
             if padron_type == "Per":
