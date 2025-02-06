@@ -254,6 +254,7 @@ class AccountTax(models.Model):
                         'to_date': to_date,
 
                     })
+            
             if arba_tag and arba_tag.id in invoice_tags.ids:
                               
                 
@@ -320,7 +321,7 @@ class AccountTax(models.Model):
         if self.amount_type == 'partner_tax':
             date = self._context.get('invoice_date', fields.Date.context_today(self))
 
-            if not date:
+            if not date or date.year == 1970:
                 date = fields.Date.context_today(self)
             partner = partner and partner.sudo()
             return base_amount * self.sudo().get_partner_alicuota_percepcion(partner, date)
