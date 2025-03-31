@@ -64,7 +64,7 @@ class AccountMove(models.Model):
                 return not (
                     self.company_id.l10n_ar_company_requires_vat and
                     self.partner_id.l10n_ar_afip_responsibility_type_id.code in ['1'] or False)
-        return self.l10n_latam_document_type_id.l10n_ar_letter in ['B', 'C', 'X', 'R']
+        return self.l10n_latam_document_type_id.l10n_ar_letter in ['C', 'X', 'R']
 
     def _post(self, soft=True):
         """ Estamos sobreescribiendo este método para hacer cosas que en odoo oficial no se puede tanto previo como posterior a la validación de la factura. """
