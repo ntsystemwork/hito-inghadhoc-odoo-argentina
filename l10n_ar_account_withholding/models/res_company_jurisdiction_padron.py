@@ -88,6 +88,8 @@ class ResCompanyJurisdictionPadron(models.Model):
 
     def find_file(self, rootdir, type_code):
         res = False
+        if not self.l10n_ar_padron_from_date:
+            pass
         date = str(self.l10n_ar_padron_from_date.month) + \
             str(self.l10n_ar_padron_from_date.year)
         pattern = "%s.{1}|.TXT\Z" % type_code + date
