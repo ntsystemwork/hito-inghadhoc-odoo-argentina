@@ -24,12 +24,13 @@
                     <group>
                         <group>
                             <field name="company_id"/>
-                            <field name="jurisdiction_id"/>
+                            <field name="l10n_ar_padron_from_date" required="0" readonly="1"/>
                             <field name="file_padron"/>
                         </group>
                         <group>
-                            <field name="l10n_ar_padron_from_date"/>
-                            <field name="l10n_ar_padron_to_date"/>
+                            <field name="jurisdiction_id"/>
+                            <field name="l10n_ar_padron_to_date" required="0" readonly="1"/>
+                            <button type="object" name="reescribirAlicuotaARBA" string="Reescribir" class="btn btn-primary" />
                         </group>
                     </group>
                     <p class="alert alert-info" role="alert" style="margin-bottom:0px;">
@@ -40,6 +41,17 @@
                             </li>
                         </ul>
                     </p>
+                    <notebook>
+                        <page string="Contenido">
+                            <field name="log_content" />
+                        </page>
+                        <page string="Padrones Cargados">
+                            <field name="log_process" />
+                        </page>
+                        <page string="No Procesados">
+                            <field name="log_no_process" />
+                        </page>
+                    </notebook>
                 </sheet>
             </form>
         </field>
