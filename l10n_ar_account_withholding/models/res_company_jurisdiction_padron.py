@@ -112,7 +112,6 @@ class ResCompanyJurisdictionPadron(models.Model):
             finally:
                 if temp_dir and os.path.exists(temp_dir):
                     shutil.rmtree(temp_dir)
-                    os.remove(temp_dir)
 
     def descompress_file(self, file_padron):
         ruta_extraccion = tempfile.mkdtemp()  # crea carpeta temporal única
@@ -134,7 +133,8 @@ class ResCompanyJurisdictionPadron(models.Model):
                 return archivos_txt, ruta_extraccion
         except zipfile.BadZipFile:
             raise ValidationError("El archivo subido no es un ZIP válido.")
-
+        finally:
+            os.remove(temp_zip_path)
 
 
     def open_file(self, rec):
