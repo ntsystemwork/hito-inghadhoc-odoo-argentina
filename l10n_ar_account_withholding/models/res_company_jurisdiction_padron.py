@@ -110,10 +110,11 @@ class ResCompanyJurisdictionPadron(models.Model):
                                 print(e)
 
     def descompress_file(self, file_padron):
-        ruta_extraccion = tempfile.mkdtemp()  # crea carpeta temporal única
+        ruta_extraccion = '/src/tmp_padron'
+        os.makedirs(ruta_extraccion, exist_ok=True)
         file = base64.decodebytes(file_padron)
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as temp_zip:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.zip', dir=ruta_extraccion) as temp_zip:
             temp_zip.write(file)
             temp_zip_path = temp_zip.name
 
@@ -253,12 +254,12 @@ class ResCompanyJurisdictionPadron(models.Model):
         aliquot_ret = 0.0
         aliquot_per = 0.0
         for padron_type in padron_types:
-            path_file = self.find_file("/tmp/", padron_type)
+            path_file = self.find_file("/src/tmp_padron", padron_type)
             if not path_file:
                 self.descompress_file(self.file_padron)
-                path_file = self.find_file("/tmp/", padron_type)
+                path_file = self.find_file("/src/tmp_padron", padron_type)
             try:
-                nro, aliquot = self.find_aliquot("/tmp/" + path_file, partner.vat)
+                nro, aliquot = self.find_aliquot("/src/tmp_padron" + path_file, partner.vat)
             except:
                 _logger.info(f"-- 114 Problema en el path_file = {path_file} ")
                 nro, aliquot = 0,0
