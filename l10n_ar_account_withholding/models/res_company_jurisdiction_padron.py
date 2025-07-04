@@ -112,6 +112,7 @@ class ResCompanyJurisdictionPadron(models.Model):
             finally:
                 if temp_dir and os.path.exists(temp_dir):
                     shutil.rmtree(temp_dir)
+                    os.remove(temp_dir)
 
     def descompress_file(self, file_padron):
         ruta_extraccion = tempfile.mkdtemp()  # crea carpeta temporal única
