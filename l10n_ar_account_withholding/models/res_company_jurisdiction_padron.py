@@ -9,7 +9,7 @@ import re
 import logging
 import base64
 _logger = logging.getLogger(__name__)
-
+import shutil
 
 class ResCompanyJurisdictionPadron(models.Model):
     _name = "res.company.jurisdiction.padron"
@@ -46,75 +46,78 @@ class ResCompanyJurisdictionPadron(models.Model):
             if not rec.file_padron:
                 raise ValidationError('No se encuentra subido el archivo del padron')
 
-            files_lines_dict = rec.open_file(rec)
-            filtered_lines_dict = rec.find_contacts_in_line(files_lines_dict, contact)
-            for file_name, find_lines in filtered_lines_dict.items():
-                for line in find_lines:
-                    line = line.replace('\n', '')
-                    try:
-                        split_line = line.split(';')
-                        tipo = split_line[0]  # "R" o "P"
-                        from_date = datetime.strptime(split_line[2], '%d%m%Y').date()
-                        to_date = datetime.strptime(split_line[3], '%d%m%Y').date()
-                        cuit = split_line[4]
-                        alicuot = float(split_line[8].replace(',', '.'))
+            files_lines_dict, temp_dir = rec.open_file(rec)
+            try:
+                filtered_lines_dict = rec.find_contacts_in_line(files_lines_dict, contact)
+                for file_name, find_lines in filtered_lines_dict.items():
+                    for line in find_lines:
+                        line = line.replace('\n', '')
+                        try:
+                            split_line = line.split(';')
+                            tipo = split_line[0]  # "R" o "P"
+                            from_date = datetime.strptime(split_line[2], '%d%m%Y').date()
+                            to_date = datetime.strptime(split_line[3], '%d%m%Y').date()
+                            cuit = split_line[4]
+                            alicuot = float(split_line[8].replace(',', '.'))
 
-                        if not self.l10n_ar_padron_from_date:
-                            self.l10n_ar_padron_from_date = from_date
-                        if not self.l10n_ar_padron_to_date:
-                            self.l10n_ar_padron_to_date = to_date
-                    except Exception as e:
-                        rec.log_no_process += f'No se puede procesar la linea: {line}\n'
-                        print(f'No se obtener los valores de la linea: {line}')
-                        print(e)
-                        continue
+                            if not self.l10n_ar_padron_from_date:
+                                self.l10n_ar_padron_from_date = from_date
+                            if not self.l10n_ar_padron_to_date:
+                                self.l10n_ar_padron_to_date = to_date
+                        except Exception as e:
+                            rec.log_no_process += f'No se puede procesar la linea: {line}\n'
+                            print(f'No se obtener los valores de la linea: {line}')
+                            print(e)
+                            continue
 
-                    contact = self.env['res.partner'].search([('vat', '=', cuit)], limit=1)
-                    rec.log_content += f'{line}\n'
-                    if contact:
-                        find = False
-                        if contact.arba_alicuot_ids:
-                            for ali in contact.arba_alicuot_ids:
-                                if ali.tag_id.id == rec.jurisdiction_id.id:
-                                    if ali.from_date == from_date:
-                                        find = True
-                                        update_vals = {
-                                            'tag_id': rec.jurisdiction_id.id,
-                                            'from_date': from_date,
-                                            'to_date': to_date,
-                                            'date_last_update': datetime.now(),
-                                        }
-                                        if tipo == 'R':
-                                            update_vals['alicuota_retencion'] = alicuot
-                                        elif tipo == 'P':
-                                            update_vals['alicuota_percepcion'] = alicuot
-                                        ali.sudo().update(update_vals)
-                                        rec.log_process += f'Linea procesada: {line}\n'
-                        if not find:
-                            new_line = {
-                                'tag_id': rec.jurisdiction_id.id,
-                                'from_date': from_date,
-                                'to_date': to_date,
-                                'withholding_amount_type': 'untaxed_amount',
-                            }
-                            if tipo == 'R':
-                                new_line['alicuota_retencion'] = alicuot
-                            elif tipo == 'P':
-                                new_line['alicuota_percepcion'] = alicuot
+                        contact = self.env['res.partner'].search([('vat', '=', cuit)], limit=1)
+                        rec.log_content += f'{line}\n'
+                        if contact:
+                            find = False
+                            if contact.arba_alicuot_ids:
+                                for ali in contact.arba_alicuot_ids:
+                                    if ali.tag_id.id == rec.jurisdiction_id.id:
+                                        if ali.from_date == from_date:
+                                            find = True
+                                            update_vals = {
+                                                'tag_id': rec.jurisdiction_id.id,
+                                                'from_date': from_date,
+                                                'to_date': to_date,
+                                                'date_last_update': datetime.now(),
+                                            }
+                                            if tipo == 'R':
+                                                update_vals['alicuota_retencion'] = alicuot
+                                            elif tipo == 'P':
+                                                update_vals['alicuota_percepcion'] = alicuot
+                                            ali.sudo().update(update_vals)
+                                            rec.log_process += f'Linea procesada: {line}\n'
+                            if not find:
+                                new_line = {
+                                    'tag_id': rec.jurisdiction_id.id,
+                                    'from_date': from_date,
+                                    'to_date': to_date,
+                                    'withholding_amount_type': 'untaxed_amount',
+                                }
+                                if tipo == 'R':
+                                    new_line['alicuota_retencion'] = alicuot
+                                elif tipo == 'P':
+                                    new_line['alicuota_percepcion'] = alicuot
 
-                            try:
-                                contact.sudo().write({'arba_alicuot_ids': [(0, 0, new_line)]})
-                                rec.log_process += f'Linea procesada: {line}\n'
-                            except Exception as e:
-                                rec.log_no_process += f'No se puede procesar la linea: {line}\n'
-                                print(e)
+                                try:
+                                    contact.sudo().write({'arba_alicuot_ids': [(0, 0, new_line)]})
+                                    rec.log_process += f'Linea procesada: {line}\n'
+                                except Exception as e:
+                                    rec.log_no_process += f'No se puede procesar la linea: {line}\n'
+                                    print(e)
+            finally:
+                if temp_dir and os.path.exists(temp_dir):
+                    shutil.rmtree(temp_dir)
 
     def descompress_file(self, file_padron):
-        ruta_extraccion = '/src/tmp_padron'
-        os.makedirs(ruta_extraccion, exist_ok=True)
+        ruta_extraccion = tempfile.mkdtemp()  # crea carpeta temporal única
         file = base64.decodebytes(file_padron)
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.zip', dir=ruta_extraccion) as temp_zip:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as temp_zip:
             temp_zip.write(file)
             temp_zip_path = temp_zip.name
 
@@ -127,10 +130,9 @@ class ResCompanyJurisdictionPadron(models.Model):
                         full_path = os.path.join(ruta_extraccion, f)
                         if os.path.isfile(full_path):  # seguridad extra
                             archivos_txt.append(full_path)
-                return archivos_txt
+                return archivos_txt, ruta_extraccion
         except zipfile.BadZipFile:
             raise ValidationError("El archivo subido no es un ZIP válido.")
-
 
 
 
@@ -146,7 +148,7 @@ class ResCompanyJurisdictionPadron(models.Model):
             return {'file.txt': list(filter(None, lines))}
         except UnicodeDecodeError:
             # Si es ZIP
-            file_paths = self.descompress_file(rec.file_padron)
+            file_paths, temp_dir = self.descompress_file(rec.file_padron)
             if not file_paths:
                 raise ValidationError('No se encontraron archivos .txt dentro del ZIP.')
 
@@ -159,7 +161,7 @@ class ResCompanyJurisdictionPadron(models.Model):
                         all_lines[file_name] = lines
                 except Exception as e:
                     rec.log_no_process += f"No se pudo leer el archivo: {file_name}\n"
-            return all_lines
+            return all_lines, temp_dir
 
 
 
@@ -202,24 +204,6 @@ class ResCompanyJurisdictionPadron(models.Model):
             res += [(padron.id, name)]
         return res
 
-    # def descompress_file(self, file_padron):
-    #     _logger.log(25, "Descompress zip file")
-    #     ruta_extraccion = "/tmp"
-    #     try:
-    #         file = base64.b64decode(file_padron)
-    #     except:
-    #         file = base64.decodestring(file_padron)
-    #     fobj = tempfile.NamedTemporaryFile(delete=False)
-    #     fname = fobj.name
-    #     fobj.write(file)
-    #     fobj.close()
-    #     f = open(fname, 'r+b')
-    #     data = f.read()
-    #     f.write(base64.b64decode(file_padron))
-    #     with zipfile.ZipFile(f, 'r') as zip_file:
-    #         zip_file.extractall(path=ruta_extraccion)
-    #         zip_file.close()
-
     def find_aliquot(self, path, cuit):
         """We try to find aliqut and number for a partner given
         """
@@ -254,12 +238,12 @@ class ResCompanyJurisdictionPadron(models.Model):
         aliquot_ret = 0.0
         aliquot_per = 0.0
         for padron_type in padron_types:
-            path_file = self.find_file("/src/tmp_padron", padron_type)
+            path_file = self.find_file("/tmp/", padron_type)
             if not path_file:
                 self.descompress_file(self.file_padron)
-                path_file = self.find_file("/src/tmp_padron", padron_type)
+                path_file = self.find_file("/tmp/", padron_type)
             try:
-                nro, aliquot = self.find_aliquot("/src/tmp_padron" + path_file, partner.vat)
+                nro, aliquot = self.find_aliquot("/tmp/" + path_file, partner.vat)
             except:
                 _logger.info(f"-- 114 Problema en el path_file = {path_file} ")
                 nro, aliquot = 0,0
