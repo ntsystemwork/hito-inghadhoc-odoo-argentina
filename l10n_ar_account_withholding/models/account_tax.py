@@ -264,7 +264,7 @@ class AccountTax(models.Model):
                 )
                 # si no hay numero de comprobante entonces es porque no
                 # figura en el padron, aplicamos alicuota no inscripto
-                if not arba_data['numero_comprobante']:
+                if not arba_data.get('numero_comprobante', False):
                     arba_data['numero_comprobante'] = \
                         'Alícuota no inscripto'
                     arba_data['alicuota_retencion'] = \
