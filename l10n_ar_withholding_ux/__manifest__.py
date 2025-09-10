@@ -1,6 +1,6 @@
 {
     'name': 'Argentinian withholding UX',
-    'version': "17.0.1.1.0",
+    'version': "17.0.1.1.1",
     'category': 'Localization/Argentina',
     'sequence': 14,
     'author': 'ADHOC SA',

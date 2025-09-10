@@ -2,7 +2,8 @@ from ast import literal_eval
 
 from odoo import models, fields, api, Command, _
 from odoo.exceptions import UserError, ValidationError
-
+import logging
+_logger = logging.getLogger(__name__)
 
 class AccountPayment(models.Model):
 
@@ -44,47 +45,51 @@ class AccountPayment(models.Model):
         self.ensure_one()
         write_off_line_vals = []
         conversion_rate = self.exchange_rate or 1.0
-        sign = 1
-        if self.partner_type == 'supplier':
-            sign = -1
+        sign = -1 if self.partner_type == 'supplier' else 1
+    
+        currency = self.currency_id or self.company_id.currency_id
+        if not currency:
+            # Log para debug: este caso no debería pasar nunca
+            _logger.warning("Payment %s no tiene currency_id ni moneda en la compañía", self.id)
+            return write_off_line_vals  # o podrías levantar un UserError si querés
+    
         for line in self.l10n_ar_withholding_line_ids:
-            # nuestro approach esta quedando distinto al del wizard. En nuestras lineas tenemos los importes en moneda
-            # de la cia, por lo cual el line.amount aca representa eso y tenemos que convertirlo para el amount_currency
             account_id, tax_repartition_line_id = line._tax_compute_all_helper()
-            amount_currency = self.currency_id.round(line.amount / conversion_rate)
+            amount_currency = currency.round(line.amount / conversion_rate)
             write_off_line_vals.append({
-                    **self._get_withholding_move_line_default_values(),
-                    'name': line.name,
-                    'account_id': account_id,
-                    'amount_currency': sign * amount_currency,
-                    'balance': sign * line.amount,
-                    # este campo no existe mas
-                    # 'tax_base_amount': sign * line.base_amount,
-                    'tax_repartition_line_id': tax_repartition_line_id,
+                **self._get_withholding_move_line_default_values(),
+                'name': line.name,
+                'account_id': account_id,
+                'amount_currency': sign * amount_currency,
+                'balance': sign * line.amount,
+                'tax_repartition_line_id': tax_repartition_line_id,
             })
-
+    
         for base_amount in list(set(self.l10n_ar_withholding_line_ids.mapped('base_amount'))):
             withholding_lines = self.l10n_ar_withholding_line_ids.filtered(lambda x: x.base_amount == base_amount)
             nice_base_label = ','.join(withholding_lines.filtered('name').mapped('name'))
             account_id = self.company_id.l10n_ar_tax_base_account_id.id
             base_amount = sign * base_amount
-            base_amount_currency = self.currency_id.round(base_amount / conversion_rate)
-            write_off_line_vals.append({
-                **self._get_withholding_move_line_default_values(),
-                'name': _('Base Ret: ') + nice_base_label,
-                'tax_ids': [Command.set(withholding_lines.mapped('tax_id').ids)],
-                'account_id': account_id,
-                'balance': base_amount,
-                'amount_currency': base_amount_currency,
-            })
-            write_off_line_vals.append({
-                **self._get_withholding_move_line_default_values(),  # Counterpart 0 operation
-                'name': _('Base Ret Cont: ') + nice_base_label,
-                'account_id': account_id,
-                'balance': -base_amount,
-                'amount_currency': -base_amount_currency,
-            })
-
+            base_amount_currency = currency.round(base_amount / conversion_rate)
+    
+            write_off_line_vals += [
+                {
+                    **self._get_withholding_move_line_default_values(),
+                    'name': _('Base Ret: ') + nice_base_label,
+                    'tax_ids': [Command.set(withholding_lines.mapped('tax_id').ids)],
+                    'account_id': account_id,
+                    'balance': base_amount,
+                    'amount_currency': base_amount_currency,
+                },
+                {
+                    **self._get_withholding_move_line_default_values(),
+                    'name': _('Base Ret Cont: ') + nice_base_label,
+                    'account_id': account_id,
+                    'balance': -base_amount,
+                    'amount_currency': -base_amount_currency,
+                }
+            ]
+    
         return write_off_line_vals
 
     def action_post(self):
