@@ -10,6 +10,7 @@
                 <field name="company_id"/>
                 <field name="l10n_ar_padron_from_date"/>
                 <field name="l10n_ar_padron_to_date"/>
+                <field name="filename"/>
             </list>
         </field>
     </record>
@@ -25,7 +26,8 @@
                         <group>
                             <field name="company_id"/>
                             <field name="state_id"/>
-                            <field name="file_padron"/>
+                            <field name="filename" invisible="1"/>
+                            <field name="file_padron" filename="filename" widget="binary"/>
                         </group>
                         <group>
                             <field name="l10n_ar_padron_from_date"/>
@@ -36,7 +38,9 @@
                         Padrones implementados:
                         <ul>
                             <li>ARBA: por lo general no es necesario cargarlo aquí ya que las alícuotas se obtienen automáticamente mediante webservice.
-                                Si igualmente desea cargarlo, debe subir el archivo zip que descarga de arba y que tiene nombre de forma "PadronRGSMMAAAA.zip
+                                Si igualmente desea cargarlo, debe subir el archivo zip que descarga de arba y que tiene nombre de forma "PadronRGSMMAAAA.zip"
+                            </li>
+                            <li>Santa Fe: debe subir el archivo con formato zip que descarga del padrón PARP (Padrón de Alícuotas de Retención/Percepción) de la oficina virtual de API y que tiene nombre de forma "PARP_999999.zip"
                             </li>
                         </ul>
                     </p>

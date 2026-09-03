@@ -5,6 +5,32 @@ from odoo.exceptions import UserError
 class AccountTax(models.Model):
     _inherit = "account.tax"
 
+    company_currency_id = fields.Many2one(related="company_id.currency_id")
+
+    # Override Float → Monetary para expresar umbrales en moneda de la compañía
+    l10n_ar_non_taxable_amount = fields.Monetary(
+        currency_field="company_currency_id",
+        string="Non Taxable Amount",
+        help="Until this base amount, the tax is not applied.",
+    )
+    l10n_ar_minimum_threshold = fields.Monetary(
+        currency_field="company_currency_id",
+        string="Minimum Threshold",
+        help="If the calculated withholding/perception amount is lower than this threshold, it is 0.0.",
+    )
+
+    # Nuevos umbrales
+    l10n_ar_payment_minimum_threshold = fields.Monetary(
+        currency_field="company_currency_id",
+        string="Minimum Payment",
+        help="If the amount of each payment does not exceed this value, the withholding/perception is not applied.",
+    )
+    l10n_ar_base_minimum_threshold = fields.Monetary(
+        currency_field="company_currency_id",
+        string="Minimum Base",
+        help="If the computed base for the regime does not exceed this value, the withholding/perception is not applied.",
+    )
+
     l10n_ar_tribute_afip_code = fields.Selection(related="tax_group_id.l10n_ar_tribute_afip_code")
     l10n_ar_state_code = fields.Char(related="l10n_ar_state_id.code")
     api_codigo_articulo_retencion = fields.Selection(
@@ -87,6 +113,10 @@ class AccountTax(models.Model):
     api_articulo_inciso_calculo_retencion = fields.Selection(
         api_articulo_inciso_calculo_selection,
         string="Artículo/Inciso para el cálculo retención",
+    )
+    # mejora de usabilidad, duplicar un impuesto mantiene la secuencia
+    l10n_ar_withholding_sequence_id = fields.Many2one(
+        copy=True,
     )
 
     @api.ondelete(at_uninstall=False)

@@ -36,14 +36,12 @@ class ResCompany(models.Model):
     @api.model
     def get_arba_login_url(self, environment_type):
         if environment_type == "production":
-            arba_login_url = "https://dfe.arba.gov.ar/DomicilioElectronico/" "SeguridadCliente/dfeServicioConsulta.do"
+            arba_login_url = "https://dfe.arba.gov.ar/DomicilioElectronico/SeguridadCliente/dfeServicioConsulta.do"
         else:
-            arba_login_url = (
-                "https://dfe.test.arba.gov.ar/DomicilioElectronico" "/SeguridadCliente/dfeServicioConsulta.do"
-            )
+            arba_login_url = "https://dfe.test.arba.gov.ar/DomicilioElectronico/SeguridadCliente/dfeServicioConsulta.do"
         return arba_login_url
 
-    def arba_connect(self):
+    def arba_connect(self, environment_type=None):
         """
         Method to be called
         """
@@ -55,7 +53,8 @@ class ResCompany(models.Model):
 
         try:
             ws = IIBB()
-            environment_type = self._get_arba_environment_type()
+            if environment_type is None:
+                environment_type = self._get_arba_environment_type()
             _logger.info("Getting connection to ARBA on %s mode" % environment_type)
 
             # argumentos de conectar: self, url=None, proxy="",
@@ -64,6 +63,10 @@ class ResCompany(models.Model):
             ws.Usuario = cuit
             ws.Password = self.arba_cit
             ws.Conectar(url=arba_url)
+            # pyafipws arma el cliente httplib2 con un timeout de 30s hardcodeado; cuando el WS de ARBA
+            # se cae eso bloquea el worker ~30-50s por consulta. Fijamos un timeout corto para fallar rápido.
+            if getattr(ws, "client", None) is not None:
+                ws.client.http.timeout = 15
             _logger.info('Connection getted to ARBA with url "%s" and CUIT %s' % (arba_url, cuit))
         except ConnectionRefusedError:
             raise UserError(
@@ -76,6 +79,6 @@ class ResCompany(models.Model):
 
     @api.model
     def _process_message_error(self, ws):
-        message = ws.MensajeError
+        message = str(ws.MensajeError)
         message = message.replace("<![CDATA[", "").replace("]]/>", "")
         raise UserError(_("Padron ARBA: %s - %s (%s)") % (ws.CodigoError, message, ws.TipoError))

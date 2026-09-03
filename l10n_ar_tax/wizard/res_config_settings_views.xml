@@ -14,13 +14,18 @@
                             <field name="arba_cit" password="True"/>
                         </div>
                         <div class="row mt16">
-                            <button name="l10n_ar_arba_cit_test" type="object" class="oe_link oe_inline" string="⇒ Verificar Clave ARBA"/>
+                            <button name="l10n_ar_arba_cit_test" type="object" class="oe_link oe_inline" string="⇒ Verify ARBA Key" help="Verifies the CIT key against the ARBA production server."/>
                         </div>
 
                     </div>
                 </setting>
             </xpath>
-
+            <setting id="sepa_payments" position="after">
+                    <setting id="show_reversal_moves_in_receipts" string="Show reversal moves in receipts"
+                        help="Muestra las ND y NC en los recibos de pago, como movimientos a parte.">
+                        <field name="show_reversal_moves_in_receipts"/>
+                    </setting>
+            </setting>
         </field>
     </record>
 

@@ -18,7 +18,12 @@ class AccountFiscalPositionL10nArTax(models.Model):
     # ponemos default a los selectio porque al ser requeridos si no se comporta raro y parece que elige uno por defecto
     # pero que no esta seleccionado
     webservice = fields.Selection(
-        [("agip", "AGIP (Regimen General)"), ("arba", "ARBA"), ("rentas_cordoba", "Rentas Cordoba")],
+        [
+            ("agip", "AGIP (Regimen General)"),
+            ("arba", "ARBA"),
+            ("rentas_cordoba", "Rentas Cordoba"),
+            ("padron", "Archivo de padrón"),
+        ],
     )
     tax_template_domain = fields.Char(compute="_compute_tax_template_domain")
     default_tax_id = fields.Many2one("account.tax", required=True)
@@ -44,11 +49,24 @@ class AccountFiscalPositionL10nArTax(models.Model):
             if conflicting_records:
                 raise ValidationError("No puede haber dos impuestos del mismo grupo para la misma posicion fiscal.")
 
-    def _get_missing_taxes(self, partner, date):
+    @api.constrains("webservice", "default_tax_id")
+    def _check_webservice_available(self):
+        for record in self:
+            if record.webservice == "padron":
+                if not record.default_tax_id.l10n_ar_state_id:
+                    raise ValidationError(
+                        "Impuesto %s sin provincia establecida, no puede consultar padrón" % record.default_tax_id.name
+                    )
+                if record.default_tax_id.l10n_ar_state_id.jurisdiction_code not in ["902", "921"]:
+                    raise ValidationError(
+                        "Padrón no implementado para la provincia de %s." % record.default_tax_id.l10n_ar_state_id.name
+                    )
+
+    def _get_missing_taxes(self, partner, date, payment=None):
         taxes = self.env["account.tax"]
         for rec in self:
             if rec.webservice:
-                taxes += rec._get_tax_from_ws(partner, date)
+                taxes += rec.sudo()._get_tax_from_ws(partner, date)
             else:
                 taxes += rec.default_tax_id
         return taxes
@@ -85,8 +103,12 @@ class AccountFiscalPositionL10nArTax(models.Model):
         if not tax.active:
             tax.active = True
         if not tax:
-            # Usamos re.sub para reemplazar el patrón con el nuevo número seguido de '%'
-            name = re.sub(r"\b\d+(\.\d+)?\s*%", f"{rate}%", self.default_tax_id.name)
+            if "%" not in self.default_tax_id.name:
+                name = f"{self.default_tax_id.name} {rate}%"
+            else:
+                # Usamos re.sub para reemplazar el patrón con el nuevo número seguido de '%'
+                # Si ya tiene un porcentaje, lo reemplazamos
+                name = re.sub(r"\b\d+(\.\d+)?\s*%", f"{rate}%", self.default_tax_id.name)
 
             tax = self.default_tax_id.copy(
                 default={
@@ -111,6 +133,7 @@ class AccountFiscalPositionL10nArTax(models.Model):
             tax = self._ensure_tax(aliquot)
         # por mas que sea no inscripto creamos partner aliquot porque si no en cada
         # nueva linea o cambio se conecta a ws
+        # TODO revisar porque necesitamos esto
         if self.env.ref("base.user_demo", raise_if_not_found=False):
             # Fix para que al cargar data demo al instalar demo_base_minimal no se termine creando 2 veces
             # los mismos registros de 'l10n_ar.partner.tax'
@@ -141,17 +164,56 @@ class AccountFiscalPositionL10nArTax(models.Model):
         )
         return tax
 
+    def _search_padron_file(self, state_id, date):
+        """Busca un archivo de padrón para una jurisdicción y fecha dadas
+        :param state_id: ID del estado/jurisdicción
+        :param date: Fecha para validar vigencia del padrón
+        :return: Registro de res.company.jurisdiction.padron o recordset vacío
+        """
+        self.ensure_one()
+        res = self.env["res.company.jurisdiction.padron"].search(
+            [
+                ("state_id", "in", state_id.ids),
+                ("company_id", "=", self.fiscal_position_id.company_id.id),
+                "|",
+                ("l10n_ar_padron_from_date", "=", False),
+                ("l10n_ar_padron_from_date", "<=", date),
+                "|",
+                ("l10n_ar_padron_to_date", "=", False),
+                ("l10n_ar_padron_to_date", ">=", date),
+            ],
+            limit=1,
+        )
+        return res
+
     def _get_agip_data(self, partner, date, to_date):
         # si es base en data demo devolvemos una alicuota demo para que no falle la demo data
         if self.env.ref("base.user_demo", raise_if_not_found=False):
             return (2.5 if self.tax_type == "withholding" else 3.0, "VALOR DUMMY | dummy")
-        raise UserError(_("Falta configuración de credenciales de ADHOC para consulta de " "Alícuotas de AGIP"))
+        raise UserError(_("Falta configuración de credenciales de ADHOC para consulta de Alícuotas de AGIP"))
 
     def _get_arba_data(self, partner, date, to_date):
+        """Metodo que obtiene la alicuota de ARBA de un partner y fecha dado
+
+        :return: (float, string) alícuota y referencia
+
+        donde:
+            float valor alicuota (retencion o percepcion depende del caso)
+            string "numero comprobante codigohast GrupoRetencion/Percepcion"
+
+        Si hay un padron de alicuotas ya cargado en el sistema, lo usamos
+        para obtener la alícuota, sino consultamos el webservice de ARBA
+        """
         self.ensure_one()
 
         cuit = partner.ensure_vat()
         _logger.info("Getting ARBA data for cuit %s from date %s to date %s" % (date, to_date, cuit))
+
+        # Si no existe padron NO devolvemos ref y pasamos a consultar alícuota al webservice
+        alicuot, ref = self._get_padron_data(partner, date, to_date)
+        if ref:
+            return alicuot, ref
+
         ws = self.fiscal_position_id.company_id.arba_connect()
         ws.ConsultarContribuyentes(date.strftime("%Y%m%d"), to_date.strftime("%Y%m%d"), cuit)
 
@@ -210,7 +272,12 @@ class AccountFiscalPositionL10nArTax(models.Model):
             else:
                 return (float(ws.AlicuotaPercepcion.replace(",", ".")) if ws.AlicuotaPercepcion else None, tax_data)
         else:
-            return None, ws.CodigoHash
+            ref = (
+                self.env._("%s | CUIT %s not present on padron ARBA") % (ws.CodigoHash, cuit)
+                if ws.CodigoError == "11"
+                else ws.CodigoHash
+            )
+            return None, ref
 
     def _get_rentas_cordoba_data(self, partner, date, to_date):
         """Obtener alícuotas desde app.rentascordoba.gob.ar
@@ -231,19 +298,35 @@ class AccountFiscalPositionL10nArTax(models.Model):
         payload = {"body": partner.vat}
         headers = {"content-type": "application/json"}
 
+        error_msg = self.env._(
+            "No pudimos obtener la alicuota del webservice de rentascordoba.\n\n"
+            "Para asignar la alícuota de Córdoba a un contacto, siga estos pasos:\n"
+            "1) Consulte la alícuota del contacto en: https://www.rentascordoba.gob.ar/gestiones/consulta-alicuota\n"
+            "2) Cree manualmente la alícuota en la vista formulario del Contacto (solapa 'Contabilidad').\n\n"
+            "En caso de dudas o si el problema persiste, comuníquese con nuestro equipo de Servicio de Asistencia.\n"
+            "Detalle del error:\n"
+        )
+
         # Realizar solicitud
         try:
             r = requests.post(url, data=json.dumps(payload), headers=headers, timeout=10)
-            json_body = r.json()
-        except requests.exceptions.Timeout:
-            msg = self.env._("Timeout error when getting data from rentascordoba.gob.ar")
-            _logger.warning("%s" % msg)
-            raise UserError("%s" % msg)
+        except requests.exceptions.Timeout as e:
+            _logger.warning("%s" % str(e))
+            raise UserError(error_msg + self.env._("Timeout error when getting data.")) from e
         except requests.exceptions.RequestException as e:
-            msg = self.env._("Error when contacting rentascordoba.gob.ar. The server answered: \n%s" % str(e))
-            _logger.warning("%s" % msg)
-            raise UserError("%s" % msg)
-
+            _logger.warning("%s" % str(e))
+            raise UserError(error_msg) from e
+        if not r.ok:
+            _logger.warning("rentascordoba answered HTTP %s: %s", r.status_code, r.text[:500])
+            raise UserError(error_msg + self.env._("HTTP %s error.") % r.status_code)
+        # el webservice contesta HTML (pagina de error, mantenimiento) o un body vacio cuando esta
+        # caido, y con un status que no siempre es de error: sin esta guarda el JSONDecodeError sale
+        # crudo al usuario en vez del instructivo de arriba (tickets 108553, 122532, 126698)
+        try:
+            json_body = r.json()
+        except requests.exceptions.JSONDecodeError as e:
+            _logger.warning("rentascordoba answered a non-JSON body: %s", r.text[:500])
+            raise UserError(error_msg + self.env._("The webservice answered a non-JSON response.")) from e
         code = json_body.get("errorCod")
         ref = json_body.get("message")
 
@@ -277,3 +360,54 @@ class AccountFiscalPositionL10nArTax(models.Model):
                     )
 
         return aliquot, ref
+
+    def _get_padron_data(self, partner, date, to_date):
+        """Método implementado para obtener alícuota de padrón ARBA y Santa Fe:
+        jurisdiction_code de Santa Fe = 921, de ARBA = 902
+        1) Santa Fe:
+         * si no existe padrón para el período correspondiente entonces devuelve UserError para que lo cargue.
+         * si existe padrón para el período correspondiente, busca el CUIT en el padrón y:
+            a) si lo encuentra devuelve la tasa y "Alícuota padrón Santa Fe",
+            b) si no lo encuentra devuelve None, "Alícuota no inscripto Santa Fe (archivo importado)"
+        2) ARBA:
+         * si no existe padrón devuelve None, None
+         * si existe padrón para el período correspondiente, busca el CUIT en el padrón y:
+            a) si lo encuentra devuelve la tasa y "Alícuota padrón ARBA (archivo importado)",
+            b) si no lo encuentra devuelve None, "Alícuota no inscripto ARBA (archivo importado)"
+
+        return: alicuot, ref
+        """
+        self.ensure_one()
+        state = self.default_tax_id.l10n_ar_state_id
+        padron_file = self._search_padron_file(state, date)
+        if not padron_file:
+            # si la consulta de padron viene por "contingencia" (por ej. se usa ws de arba o agip) y no hay padron, no queremos raise
+            if self.webservice != "padron":
+                return None, None
+            # Si se está consultando alícuota con tipo "padron" y no hay, entonces damos error.
+            raise UserError(
+                _(
+                    "No hay padrón subido para la fecha indicada %s a %s. Debe subirlo en 'Contabilidad / Configuración / AFIP / Padrón de Alícuotas por compañía' o cargar la alícuota manualmente en el contacto para el período en curso."
+                )
+                % (date, to_date)
+            )
+        nro, alicuot_ret, alicuot_per = padron_file._get_aliquot(partner)
+        if state.jurisdiction_code == "921":
+            if nro:
+                # en santa fe en realidad no hay nro, viene True/False (Segun si lo encontramos), por eso no devolvemos string genérica
+                return (
+                    alicuot_ret if self.tax_type == "withholding" else alicuot_per,
+                    "Alícuota padrón Santa Fe",
+                )
+            else:
+                return None, "Alícuota castigo. No figura en padrón Santa Fe"
+        if state.jurisdiction_code == "902":
+            if nro:
+                return (
+                    float(alicuot_ret.replace(",", "."))
+                    if self.tax_type == "withholding"
+                    else float(alicuot_per.replace(",", ".")),
+                    "Alícuota padrón ARBA (archivo importado)",
+                )
+            else:
+                return None, "Alícuota no inscripto ARBA (archivo importado)"
